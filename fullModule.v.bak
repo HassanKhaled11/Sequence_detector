@@ -1,0 +1,185 @@
+
+module shift_register(
+input clk,
+input reset,
+input serial_in,
+output reg[3:0] p);
+
+always @(posedge clk)
+begin
+  
+  if(reset)
+    p <= 4'b0000;
+    
+  else
+    p <= {p[2],p[1],p[0],serial_in};
+end
+endmodule  
+
+
+
+module sequence_det(input clk,
+input reset,
+input new_bit,
+output reg ok,                      // sequence detector here can control ok signal so it is reg
+output wire [3:0] n);               // Here seq-det can't control the n as it is controlled by shift_reg so it is wire
+
+ shift_register sr(clk , reset , new_bit , n );  // here the clk is the same clk of the seq det ans rst is the same and connect the new bit to serial in also the out p to n 
+ 
+ parameter A = 0;
+ parameter B = 1;
+ parameter C = 2;
+ parameter D = 3;
+ 
+ reg [1:0] currentState;
+ reg [1:0] nextState;
+ 
+ always @(posedge clk)
+ begin
+   if(!reset)
+     currentState <= nextState;
+   else
+     currentState <= A;
+ end
+ 
+ always @(new_bit , currentState)
+ begin 
+     
+     case(currentState)
+       A : 
+                  case(new_bit)
+                    0: begin
+                          nextState <= A;
+                          ok <= 1'b0;
+                        end
+                    1:
+                    begin   
+                          nextState <= B;
+                           ok <= 1'b0;
+                         end
+                 endcase
+       
+       
+       B : 
+                  case(new_bit)
+                    0:    
+                      begin
+                          nextState <= C;
+                          ok <= 1'b0;
+                      end
+                        
+                    1:   
+                         begin  
+                          nextState <= B;
+                           ok <= 1'b0;
+                         end
+                  endcase  
+                           
+       C : 
+       begin
+                  case(new_bit)
+                    0: 
+                     begin
+                          nextState <= A;
+                          ok <= 1'b0;
+                      end  
+                    1:   
+                      begin
+                          nextState <= D;
+                           ok <= 1'b0;
+                       end  
+                 endcase             
+               
+                end
+ 
+      D :     begin
+                  case(new_bit)
+                    0:    
+                    begin
+                          nextState <= C;
+                          ok <= 1'b0;
+                     end
+                        
+                    1:   begin
+                          nextState <= B;
+                           ok <= 1'b1;
+                         end
+                  endcase   
+       end            
+      endcase                
+       
+     end
+   endmodule
+   
+   
+   module checker(input wire [3:0] n1,
+    input wire [3:0] n2, 
+    input wire ok1,
+    input wire ok2,
+    output [1:0] mode,
+    output [3:0] result);
+    
+    assign mode = (ok1 & ok2) ? 2'b10 : (ok1| ok2) ? 2'b01 : 2'b00;
+    assign result = n1 ^ n2;
+    
+  endmodule
+  
+  
+  module top_module( input clk , input reset , input seq1 , input seq2 ,output [1:0] mode , output [3:0] finalResult);
+    
+    wire ok1;
+    wire ok2;
+    
+    wire [3:0] n1;
+    wire [3:0] n2;
+    
+    
+   sequence_det s1(clk, reset, seq1,ok1,n1);
+   sequence_det s2(clk, reset, seq2,ok2,n2);
+   checker  ch (n1,n2,ok1,ok2,mode,finalResult);
+      
+    endmodule
+    
+    
+    
+    module tb();
+      
+      reg clk = 0;
+      reg reset;                            //floating high impedence
+      
+      reg  [31:0] seq1 =  32'b1000_1011_1111_1000_1011_1101_1011_0001;
+      reg  [31:0] seq2 =  32'b1011_1011_1111_1000_1010_1110_1011_0001;
+   
+      wire [1:0] mode;
+      wire [3:0] result;
+  
+      
+      always
+      
+      #5 clk <= ~clk;
+      
+      initial
+       
+      begin
+      $monitor("%d %d",mode,result);
+      
+       
+        reset  = 1 ;           // hna ana 3awz reset b 1 for 15 ms then de active it 
+        
+      #15
+      reset = 0;
+       end
+       
+       
+       always @(posedge clk)
+       begin
+       if(!reset)
+       begin
+         seq1 <= seq1 << 1;
+         seq2 <= seq2 << 1;
+       end
+       end
+        
+        top_module tb(  clk ,  reset ,  seq1[31] , seq2[31] , mode , result);
+       
+  endmodule
